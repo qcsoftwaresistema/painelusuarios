@@ -14,17 +14,25 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 # 1. Tratamento seguro de credenciais e URL de conexão
-# Usamos o quote_plus para escapar caracteres especiais na senha de forma segura
 usuario = "fabricio"
 senha_segura = urllib.parse.quote_plus("Myfab@123")
 host = "179.198.119.225"
 porta = "5432"
 banco = "qcsoftware"
 
-SQLALCHEMY_DATABASE_URL = f"postgresql://{usuario}:{senha_segura}@{host}:{porta}/{banco}?sslmode=disable"
+# Adicionado '+psycopg' para coincidir com a dependência psycopg v3
+SQLALCHEMY_DATABASE_URL = (
+    f"postgresql+psycopg://{usuario}:{senha_segura}@{host}:{porta}/{banco}"
+)
 
 # 2. Configuração do Engine e Sessão
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    pool_pre_ping=True,  # Testa a conexão antes de usar (evita conexões caindo)
+    pool_recycle=300,    # Recicla conexões a cada 5 minutos
+    connect_args={"sslmode": "prefer"}  # Aceita SSL se disponível, se não usa sem SSL
+)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Contexto para hashing seguro de senhas
