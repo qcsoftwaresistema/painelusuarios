@@ -176,6 +176,40 @@ async function carregarUsuarios() {
     }
 }
 
+// Helper nativo para gerar hash SHA-256 com Salt aleatório único (Web Crypto API)
+async function gerarHashSenha(senhaTexto) {
+    // 1. Gera 16 bytes aleatórios (Salt único por chamada)
+    const arraySalt = new Uint8Array(16);
+    crypto.getRandomValues(arraySalt);
+    const saltHex = Array.from(arraySalt).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    // 2. Concatena a senha com o Salt aleatório
+    const encoder = new TextEncoder();
+    const data = encoder.encode(senhaTexto + saltHex);
+
+    // 3. Processa a criptografia SHA-256
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+    // 4. Retorna no formato "salt$hash" (garante valores únicos no banco de dados)
+    return `${saltHex}$${hashHex}`;
+}
+
+// Helper robusto para envio sem quebrar a execução em falhas de rede/CORS
+async function enviarRequisicaoSegura(url, metodo, payload) {
+    try {
+        const res = await fetch(url, {
+            method: metodo,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        return res;
+    } catch (_) {
+        return null; // Retorna null se houver bloqueio de CORS ou falha de rede sem derrubar o script
+    }
+}
+
 async function salvarUsuario(e) {
     e.preventDefault();
     const id = document.getElementById("usr-id").value;
@@ -193,29 +227,51 @@ async function salvarUsuario(e) {
         ativo: true
     };
 
+    // Aplica o hash apenas se a senha tiver sido preenchida
     if (senha && senha.trim() !== "") {
-        payload.senha = senha;
+        payload.senha_hash = await gerarHashSenha(senha);
     }
 
     const acaoTexto = id ? "usuário atualizado" : "usuário cadastrado";
-    const urlP = id ? `${API_BASE}/usuarios/${id}/` : `${API_BASE}/usuarios/`;
-    const urlA = id ? `${API_BASE}/usuarios/${id}` : `${API_BASE}/usuarios`;
-    const method = id ? "PUT" : "POST";
 
-    try {
-        const res = await fetchInteligente(urlP, urlA, {
-            method,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
+    // Normaliza a URL base para evitar erros de Mixed Content (HTTP vs HTTPS)
+    let baseUrl = API_BASE.replace(/^http:\/\//i, "https://");
+    const endpointPath = id ? `/usuarios/${id}` : `/usuarios`;
 
+    let res = null;
+
+    if (!id) {
+        // --- CRIAÇÃO (POST) ---
+        res = await enviarRequisicaoSegura(`${baseUrl}${endpointPath}/`, "POST", payload) ||
+              await enviarRequisicaoSegura(`${baseUrl}${endpointPath}`, "POST", payload);
+    } else {
+        // --- EDIÇÃO (Tentativas Sequenciais: PUT -> PATCH -> POST) ---
+        const metodos = ["PUT", "PATCH", "POST"];
+        const variacoesUrl = [`${baseUrl}${endpointPath}/`, `${baseUrl}${endpointPath}`];
+
+        for (const metodo of metodos) {
+            for (const url of variacoesUrl) {
+                res = await enviarRequisicaoSegura(url, metodo, payload);
+                if (res && (res.ok || res.status === 422 || res.status === 400)) {
+                    break;
+                }
+            }
+            if (res && (res.ok || res.status === 422 || res.status === 400)) {
+                break;
+            }
+        }
+    }
+
+    // Processa a resposta usando o helper padrão de alertas
+    if (res) {
         const data = await tratarResposta(res, acaoTexto, true);
         if (data !== null) {
             resetFormUsuario();
             carregarUsuarios();
         }
-    } catch (err) {
-        console.error("Erro ao salvar usuário:", err);
+    } else {
+        console.error("Erro de conexão/CORS ao salvar usuário.");
+        alert("Não foi possível se comunicar com o servidor. Verifique se as regras de CORS e os métodos HTTP (PUT/POST) estão liberados na API.");
     }
 }
 
@@ -223,11 +279,28 @@ function preencherEditarUsuario(u) {
     document.getElementById("usr-id").value = u.id_usuarios;
     document.getElementById("usr-usuario").value = u.usuario || "";
     document.getElementById("usr-email").value = u.email || "";
-    document.getElementById("usr-colaborador").value = u.id_colaboradores || "";
-    document.getElementById("usr-perfil").value = u.id_perfis || "";
+
+    const selectColab = document.getElementById("usr-colaborador");
+    if (selectColab) {
+        selectColab.value = u.id_colaboradores ? String(u.id_colaboradores) : "";
+    }
+
+    const selectPerfil = document.getElementById("usr-perfil");
+    if (selectPerfil) {
+        selectPerfil.value = u.id_perfis ? String(u.id_perfis) : "";
+    }
+
     document.getElementById("usr-senha").value = "";
-    document.getElementById("usr-senha-dica").classList.remove("hidden");
-    document.getElementById("usr-titulo-form").innerText = "Editar Usuário";
+
+    const dicaSenha = document.getElementById("usr-senha-dica");
+    if (dicaSenha) {
+        dicaSenha.classList.remove("hidden");
+    }
+
+    const tituloForm = document.getElementById("usr-titulo-form");
+    if (tituloForm) {
+        tituloForm.innerText = "Editar Usuário";
+    }
 }
 
 function resetFormUsuario() {
