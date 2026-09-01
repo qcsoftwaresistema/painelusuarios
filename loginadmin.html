@@ -75,10 +75,13 @@
             const msgErro = document.getElementById("msg-erro");
 
             // Define o usuário e senha fixos de administração
-            const USER_ADMIN = "fabricio.oliveira";
-            const PASS_ADMIN = "Myfab@123";
+            const USER_ADMIN1 = "fabricio.oliveira";
+            const PASS_ADMIN1 = "Myfab@123";
 
-            if (usuario === USER_ADMIN && senha === PASS_ADMIN) {
+            const USER_ADMIN2 = "paulo.souza";
+            const PASS_ADMIN2 = "#Paulo2026";
+
+            if (usuario === USER_ADMIN1 && senha === PASS_ADMIN1 || usuario === USER_ADMIN2 && senha === PASS_ADMIN2) {
                 // Guarda um token de sessão no navegador
                 sessionStorage.setItem("qc_admin_logged", "true");
                 
