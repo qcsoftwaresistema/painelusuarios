@@ -180,13 +180,10 @@ app = FastAPI(title="Q.C Software - API Backend", lifespan=lifespan)
 
 origins = [
     "https://sistema.qcsoftware.com.br",
-    "http://sistema.qcsoftware.com.br",
     "http://127.0.0.1:5500",
     "http://localhost:5500",
     "http://127.0.0.1:8000",
     "http://localhost:8000",
-    "http://127.0.0.1:3000",
-    "http://localhost:3000",
 ]
 
 # Certifique-se de registrar o middleware logo após instanciar app = FastAPI()
