@@ -180,18 +180,24 @@ app = FastAPI(title="Q.C Software - API Backend", lifespan=lifespan)
 
 origins = [
     "https://sistema.qcsoftware.com.br",
+    "http://sistema.qcsoftware.com.br",
     "http://127.0.0.1:5500",
     "http://localhost:5500",
     "http://127.0.0.1:8000",
     "http://localhost:8000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3000",
 ]
 
+# Certifique-se de registrar o middleware logo após instanciar app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=600,  # Faz cache do preflight por 10 minutos evitando requisições OPTIONS repetitivas
 )
 
 # --- MIDDLEWARE DE AUDITORIA ---
@@ -249,23 +255,27 @@ async def audit_logger_middleware(request: Request, call_next):
 
 class TelaSchema(BaseModel):
     nome: str
+    ativo: Optional[bool] = True
 
 class PerfilSchema(BaseModel):
     nome: str
+    ativo: Optional[bool] = True
 
 class UsuarioCriarSchema(BaseModel):
     usuario: str
     email: EmailStr
     senha: str
-    id_colaboradores: int
-    id_perfis: int
+    id_colaboradores: Optional[int] = None
+    id_perfis: Optional[int] = None
+    ativo: bool = True
 
 class UsuarioEditarSchema(BaseModel):
-    usuario: str
-    email: EmailStr
+    usuario: Optional[str] = None
+    email: Optional[EmailStr] = None
     senha: Optional[str] = None
-    id_colaboradores: int
-    id_perfis: int
+    id_colaboradores: Optional[int] = None
+    id_perfis: Optional[int] = None
+    ativo: Optional[bool] = None
 
 class LoginSchema(BaseModel):
     usuario_ou_email: str

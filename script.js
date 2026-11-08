@@ -146,30 +146,33 @@ async function carregarUsuarios() {
             const nomePerfil = u.nome_perfil || u.perfil || u.perfil_nome || mapaPerfis[u.id_perfis] || 'N/A';
 
             tbody.innerHTML += `
-                <tr class="border-b hover:bg-slate-50 ${!isAtivo ? 'opacity-60 bg-slate-100' : ''}">
-                    <td class="p-2 border text-slate-600">${u.id_usuarios}</td>
-                    <td class="p-2 border font-medium text-slate-800">${u.usuario}</td>
-                    <td class="p-2 border text-slate-600 font-medium">${nomePerfil}</td>
-                    <td class="p-2 border text-center">${badgeAtivo}</td>
-                    <td class="p-2 border text-center space-x-1">
-                        <button onclick='preencherEditarUsuario(${userJson})' 
-                                title="Editar"
-                                class="bg-emerald-600 hover:bg-emerald-700 !text-white font-semibold text-xs px-2.5 py-1 rounded inline-flex items-center gap-1 shadow-sm transition-colors cursor-pointer border-0">
-                            <i class="bi bi-pencil-square"></i> Editar
-                        </button>
-                        <button onclick="excluirUsuario(${u.id_usuarios})" 
-                                title="Excluir Definitivamente"
-                                class="bg-red-600 hover:bg-red-700 !text-white font-semibold text-xs px-2.5 py-1 rounded inline-flex items-center gap-1 shadow-sm transition-colors cursor-pointer border-0">
-                            <i class="bi bi-trash"></i> Excluir
-                        </button>
-                        <button onclick='inativarUsuario(${userJson})' 
-                                title="${isAtivo ? 'Inativar' : 'Ativar'}"
-                                class="${isAtivo ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'} !text-white font-semibold text-xs px-2.5 py-1 rounded inline-flex items-center gap-1 shadow-sm transition-colors cursor-pointer border-0">
-                            <i class="bi ${isAtivo ? 'bi-pause-circle' : 'bi-play-circle'}"></i> ${isAtivo ? 'Inativar' : 'Ativar'}
-                        </button>
-                    </td>
-                </tr>
-            `;
+    <tr class="border-b hover:bg-slate-50 ${!isAtivo ? 'opacity-60 bg-slate-100' : ''}">
+        <td class="p-2 border text-slate-600">${u.id_usuarios}</td>
+        <td class="p-2 border font-medium text-slate-800">${u.usuario}</td>
+        <td class="p-2 border font-medium text-slate-800">${u.email}</td>
+        <td class="p-2 border text-slate-600 font-medium">${nomePerfil}</td>
+        <td class="p-2 border text-center">${badgeAtivo}</td>
+        <td class="p-2 border text-center whitespace-nowrap">
+            <div class="inline-flex items-center justify-center gap-1.5 flex-nowrap">
+                <button onclick='preencherEditarUsuario(${userJson})' 
+                        title="Editar"
+                        class="bg-emerald-600 hover:bg-emerald-700 !text-white font-semibold text-xs px-2.5 py-1 rounded inline-flex items-center gap-1 shadow-sm transition-colors cursor-pointer border-0 whitespace-nowrap">
+                    <i class="bi bi-pencil-square"></i> Editar
+                </button>
+                <button onclick="excluirUsuario(${u.id_usuarios})" 
+                        title="Excluir Definitivamente"
+                        class="bg-red-600 hover:bg-red-700 !text-white font-semibold text-xs px-2.5 py-1 rounded inline-flex items-center gap-1 shadow-sm transition-colors cursor-pointer border-0 whitespace-nowrap">
+                    <i class="bi bi-trash"></i> Excluir
+                </button>
+                <button onclick='inativarUsuario(${userJson})' 
+                        title="${isAtivo ? 'Inativar' : 'Ativar'}"
+                        class="${isAtivo ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'} !text-white font-semibold text-xs px-2.5 py-1 rounded inline-flex items-center gap-1 shadow-sm transition-colors cursor-pointer border-0 whitespace-nowrap">
+                    <i class="bi ${isAtivo ? 'bi-pause-circle' : 'bi-play-circle'}"></i> ${isAtivo ? 'Inativar' : 'Ativar'}
+                </button>
+            </div>
+        </td>
+    </tr>
+`;
         });
     } catch (err) {
         console.error("Erro ao carregar usuários:", err);
@@ -275,10 +278,15 @@ async function salvarUsuario(e) {
     }
 }
 
+// --- PREENCHIMENTO DO FORMULÁRIO DE EDIÇÃO ---
 function preencherEditarUsuario(u) {
     document.getElementById("usr-id").value = u.id_usuarios;
     document.getElementById("usr-usuario").value = u.usuario || "";
     document.getElementById("usr-email").value = u.email || "";
+
+    // Armazena o estado atual do usuário no formulário para não forçar 'true' ao salvar
+    const form = document.getElementById("form-usuario");
+    form.dataset.usuarioAtivo = (u.ativo !== false).toString();
 
     const selectColab = document.getElementById("usr-colaborador");
     if (selectColab) {
@@ -304,39 +312,134 @@ function preencherEditarUsuario(u) {
 }
 
 function resetFormUsuario() {
-    document.getElementById("form-usuario").reset();
+    const form = document.getElementById("form-usuario");
+    form.reset();
+    delete form.dataset.usuarioAtivo;
     document.getElementById("usr-id").value = "";
-    document.getElementById("usr-senha-dica").classList.add("hidden");
+    document.getElementById("usr-senha-dica")?.classList.add("hidden");
     document.getElementById("usr-titulo-form").innerText = "Cadastrar Usuário";
 }
 
+// --- SALVAR USUÁRIO PRESERVANDO O STATUS 'ATIVO' ---
+async function salvarUsuario(e) {
+    e.preventDefault();
+    const id = document.getElementById("usr-id").value;
+    const usuario = document.getElementById("usr-usuario").value.trim();
+    const email = document.getElementById("usr-email").value.trim();
+    const senha = document.getElementById("usr-senha").value;
+    const valColab = document.getElementById("usr-colaborador").value;
+    const valPerfil = document.getElementById("usr-perfil").value;
+
+    // Se estiver editando, mantém o status atual (pode ser false). Se for novo, inicia como true.
+    const form = document.getElementById("form-usuario");
+    const statusAtivo = id ? (form.dataset.usuarioAtivo === "true") : true;
+
+    const payload = { 
+        usuario, 
+        email, 
+        id_colaboradores: valColab ? parseInt(valColab) : null, 
+        id_perfis: valPerfil ? parseInt(valPerfil) : null,
+        ativo: statusAtivo
+    };
+
+    if (senha && senha.trim() !== "") {
+        payload.senha_hash = await gerarHashSenha(senha);
+    }
+
+    const acaoTexto = id ? "usuário atualizado" : "usuário cadastrado";
+    let baseUrl = API_BASE.replace(/^http:\/\//i, "https://");
+    const endpointPath = id ? `/usuarios/${id}` : `/usuarios`;
+
+    let res = null;
+
+    if (!id) {
+        res = await enviarRequisicaoSegura(`${baseUrl}${endpointPath}/`, "POST", payload) ||
+              await enviarRequisicaoSegura(`${baseUrl}${endpointPath}`, "POST", payload);
+    } else {
+        const metodos = ["PUT", "PATCH", "POST"];
+        const variacoesUrl = [`${baseUrl}${endpointPath}/`, `${baseUrl}${endpointPath}`];
+
+        for (const metodo of metodos) {
+            for (const url of variacoesUrl) {
+                res = await enviarRequisicaoSegura(url, metodo, payload);
+                if (res && (res.ok || res.status === 422 || res.status === 400)) break;
+            }
+            if (res && (res.ok || res.status === 422 || res.status === 400)) break;
+        }
+    }
+
+    if (res) {
+        const data = await tratarResposta(res, acaoTexto, true);
+        if (data !== null) {
+            resetFormUsuario();
+            carregarUsuarios();
+        }
+    } else {
+        console.error("Erro de conexão/CORS ao salvar usuário.");
+        alert("Não foi possível se comunicar com o servidor.");
+    }
+}
+
+// --- INATIVAR / ATIVAR USUÁRIO COM ENVIO EXPLÍCITO DE FALSE/TRUE ---
 async function inativarUsuario(u) {
-    const isAtivo = u.ativo !== false;
-    const acao = isAtivo ? "inativar" : "ativar";
+    const idUsuario = u.id_usuarios || u.id;
+    if (!idUsuario) {
+        alert("Erro: ID do usuário não encontrado.");
+        return;
+    }
+
+    // Garante validação estrita booleana (trata se vier boolean, number 1/0 ou string)
+    const isAtivo = (u.ativo === true || u.ativo === 1 || u.ativo === "true");
+    const novoStatus = !isAtivo; // Se era true, força false booleano primitivo
+    const acao = novoStatus ? "ativar" : "inativar";
+
     if (!confirm(`Deseja realmente ${acao} este usuário?`)) return;
 
     const payload = {
         usuario: u.usuario,
         email: u.email,
-        id_colaboradores: u.id_colaboradores || null,
-        id_perfis: u.id_perfis || null,
-        ativo: !isAtivo
+        id_colaboradores: u.id_colaboradores ? parseInt(u.id_colaboradores) : null,
+        id_perfis: u.id_perfis ? parseInt(u.id_perfis) : null,
+        ativo: novoStatus
     };
 
+    console.log(`[DEBUG] Enviando para /usuarios/${idUsuario}:`, payload);
+
+    // URL fixa SEM barra no final e forçando HTTPS para evitar redirect que quebra o CORS
+    const baseUrl = API_BASE.replace(/^http:\/\//i, "https://");
+    const urlDestino = `${baseUrl}/usuarios/${idUsuario}`;
+
     try {
-        const res = await fetchInteligente(
-            `${API_BASE}/usuarios/${u.id_usuarios}/`, 
-            `${API_BASE}/usuarios/${u.id_usuarios}`,
-            {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
+        // 1. Envio direto via PUT para a rota exata da API
+        let res = await fetch(urlDestino, {
+            method: "PUT",
+            headers: { 
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
+            body: JSON.stringify(payload)
+        });
+
+        // 2. Fallback via PATCH caso o servidor exija esse método
+        if (!res.ok && (res.status === 405 || res.status === 422)) {
+            res = await fetch(urlDestino, {
+                method: "PATCH",
+                headers: { 
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                },
                 body: JSON.stringify(payload)
-            }
-        );
+            });
+        }
+
         const data = await tratarResposta(res, `${acao} usuário`, true);
-        if (data !== null) carregarUsuarios();
+        if (data !== null) {
+            console.log(`[DEBUG] Usuário atualizado com sucesso. Recarregando lista...`);
+            await carregarUsuarios(); // Atualiza a tabela na tela
+        }
     } catch (err) {
         console.error(`Erro ao ${acao} usuário:`, err);
+        alert(`Erro de comunicação com o servidor ao ${acao} o usuário.`);
     }
 }
 
@@ -681,36 +784,55 @@ async function excluirTela(param) {
     }
 }
 
-// --- PERMISSÕES MATRIZ ---
+// =========================================================================
+// --- PERMISSÕES MATRIZ (CÓDIGO UNIFICADO E DEFINITIVO) ---
+// =========================================================================
+
+// LISTA DE TELAS DO SISTEMA (USADA CASO A API /TELAS/ RETORNE VAZIO OU INDISPONÍVEL)
+const TELAS_SISTEMA_PADRAO = [
+    { id_telas: 50, nome: "Ocorrencias" },
+    { id_telas: 51, nome: "Produtos" },
+    { id_telas: 52, nome: "Maquinas" },
+    { id_telas: 53, nome: "Colaboradores" },
+    { id_telas: 55, nome: "Cargos" },
+    { id_telas: 56, nome: "Dashboard" }
+];
+
+// 1. CARREGAR PERFIS NO COMBO SELECT
 async function carregarSelectPerfisPermissoes() {
     try {
-        // Usa a URL direta para evitar redirecionamento HTTP -> HTTPS
         const res = await fetch(`${API_BASE}/perfis/`);
-        
         if (!res.ok) {
             throw new Error(`Erro na requisição: ${res.status}`);
         }
 
         const perfis = await res.json();
         const select = document.getElementById("perm-perfil");
-        
+        if (!select) return;
+
         let optionsHTML = `<option value="">Selecione um perfil...</option>`;
-        
+
         if (Array.isArray(perfis)) {
+            // Ordena perfis alfabeticamente pelo nome
+            perfis.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+
             perfis.forEach(p => {
                 if (p.ativo !== false) {
-                    optionsHTML += `<option value="${p.id_perfis}">${p.nome}</option>`;
+                    optionsHTML += `<option value="${p.id_perfis || p.id}">${p.nome}</option>`;
                 }
             });
         }
-        
+
         select.innerHTML = optionsHTML;
-        document.getElementById("tbl-permissoes-matriz").innerHTML = "";
+        
+        const tbody = document.getElementById("tbl-permissoes-matriz");
+        if (tbody) tbody.innerHTML = "";
     } catch (err) {
         console.error("Erro ao carregar lista de perfis:", err);
     }
 }
 
+// 2. FUNÇÃO PARA CRIAR BOTÕES DE PERMISSÃO COM ESTILO VISUAL E ÍCONES
 function criarBtnPermissao(classe, ativo) {
     const isAtivo = Boolean(ativo);
     const cor = isAtivo 
@@ -728,12 +850,13 @@ function criarBtnPermissao(classe, ativo) {
     `;
 }
 
+// 3. ALTERNAR ESTADO E COR DO BOTÃO AO CLICAR
 function alternarStatusPermissao(btn) {
     const estaAtivo = btn.getAttribute("data-ativo") === "true";
     const novoEstado = !estaAtivo;
-    
+
     btn.setAttribute("data-ativo", novoEstado);
-    
+
     if (novoEstado) {
         btn.className = btn.className.replace(/text-red-500 bg-red-50 border-red-200/g, 'text-emerald-600 bg-emerald-50 border-emerald-300');
         btn.innerHTML = `<i class="bi bi-check-lg"></i>`;
@@ -743,157 +866,115 @@ function alternarStatusPermissao(btn) {
     }
 }
 
+// 4. CARREGAR TODAS AS TELAS E CRUZAR COM AS PERMISSÕES DO PERFIL
 async function carregarPermissoesMatriz() {
-    const idPerfil = document.getElementById("perm-perfil").value;
-    if (!idPerfil) {
-        document.getElementById("tbl-permissoes-matriz").innerHTML = "";
+    const selectPerfil = document.getElementById("perm-perfil");
+    const idPerfil = selectPerfil ? parseInt(selectPerfil.value, 10) : null;
+    const tbody = document.getElementById("tbl-permissoes-matriz");
+
+    if (!tbody) return;
+
+    if (!idPerfil || isNaN(idPerfil)) {
+        tbody.innerHTML = "";
         return;
     }
 
-try {
-        // Busca telas e a lista geral de permissões simultaneamente
-        const [resTelas, resPerms] = await Promise.all([
-            fetch(`${API_BASE}/tela`),
-            fetch(`${API_BASE}/permissoes/`).catch(() => fetch(`${API_BASE}/permissoes`))
-        ]);
-
-        const telas = await resTelas.json();
-        const permissoes = await resPerms.json();
-
-        const tbody = document.getElementById("tbl-permissoes-matriz");
-        tbody.innerHTML = "";
-
-        if (!Array.isArray(telas)) return;
-
-        telas.forEach(t => {
-            if (t.ativo !== false) {
-                const idTela = t.id_telas || t.id;
-                const perm = Array.isArray(permissoes) 
-                    ? (permissoes.find(p => (p.id_telas || p.id_tela) === idTela) || {}) 
-                    : {};
-
-                tbody.innerHTML += `
-                    <tr class="border-b hover:bg-slate-50" data-id-tela="${idTela}">
-                        <td class="p-2 border font-medium text-slate-800">${t.nome}</td>
-                        <td class="p-2 border text-center">${criarBtnPermissao('chk-vis', perm.visualizar)}</td>
-                        <td class="p-2 border text-center">${criarBtnPermissao('chk-ins', perm.inserir)}</td>
-                        <td class="p-2 border text-center">${criarBtnPermissao('chk-alt', perm.alterar)}</td>
-                        <td class="p-2 border text-center">${criarBtnPermissao('chk-exc', perm.excluir)}</td>
-                    </tr>
-                `;
-            }
-        });
-    } catch (err) {
-        console.error("Erro ao montar matriz de permissões:", err);
-    }
-}
-
-// 1. Função para Alternar o Ícone do Checkbox ao Clicar
-function toggleCheckbox(btn) {
-    const atual = btn.getAttribute("data-ativo") === "true";
-    const novo = !atual;
-    btn.setAttribute("data-ativo", novo ? "true" : "false");
-
-    const icon = btn.querySelector("i");
-    if (icon) {
-        if (novo) {
-            icon.className = "bi bi-check-square-fill text-emerald-600 text-xl";
-        } else {
-            icon.className = "bi bi-square text-slate-300 text-xl";
-        }
-    }
-}
-
-// 2. Carrega as permissões sem duplicar telas e montando os ícones clicáveis
-async function carregarPermissoesMatriz() {
-    const idPerfil = parseInt(document.getElementById("perm-perfil")?.value);
-    const tbody = document.getElementById("tbl-permissoes-matriz");
-    if (!tbody) return;
-
-    tbody.innerHTML = ""; // Limpa a tabela
-
-    if (!idPerfil) return;
+    // Feedback visual enquanto carrega
+    tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-500">Carregando permissões do perfil...</td></tr>`;
 
     try {
-        const res = await fetch(`${API_BASE}/permissoes/`);
-        if (!res.ok) {
-            console.error("Erro na busca de permissões:", res.status);
-            return;
+        // A. Busca as telas cadastradas na API
+        let telas = [];
+        try {
+            let resTelas = await fetch(`${API_BASE}/telas/`).catch(() => null);
+            if (!resTelas || !resTelas.ok) {
+                resTelas = await fetch(`${API_BASE}/tela/`).catch(() => null);
+            }
+            if (resTelas && resTelas.ok) {
+                telas = await resTelas.json();
+            }
+        } catch (e) {
+            console.warn("Falha ao buscar /telas/, utilizando backup.", e);
         }
 
-        const todosDados = await res.json();
-        if (!Array.isArray(todosDados)) return;
+        // Caso a rota /telas/ falhe, utiliza a lista padrão
+        if (!Array.isArray(telas) || telas.length === 0) {
+            telas = TELAS_SISTEMA_PADRAO;
+        }
 
-        // Filtra pelo perfil selecionado
-        const permissoesPerfil = todosDados.filter(p => p.id_perfis === idPerfil);
-
-        // Remove duplicatas mantendo apenas a permissão mais recente para cada id_telas
-        const mapaTelas = new Map();
-        permissoesPerfil.forEach(p => {
-            // Como os IDs novos são maiores, o map guarda o último/mais recente id_permissoes
-            if (!mapaTelas.has(p.id_telas) || p.id_permissoes > mapaTelas.get(p.id_telas).id_permissoes) {
-                mapaTelas.set(p.id_telas, p);
+        // B. Busca as permissões no banco de dados
+        let permissoes = [];
+        try {
+            let resPerms = await fetch(`${API_BASE}/permissoes/`).catch(() => null);
+            if (!resPerms || !resPerms.ok) {
+                resPerms = await fetch(`${API_BASE}/permissoes`).catch(() => null);
             }
-        });
+            if (resPerms && resPerms.ok) {
+                permissoes = await resPerms.json();
+            }
+        } catch (e) {
+            console.warn("Erro ao carregar permissões:", e);
+        }
 
-        const permissoesUnicas = Array.from(mapaTelas.values());
+        tbody.innerHTML = ""; // Limpa a mensagem de carregamento
 
-        // Monta a tabela na DOM com os ícones e eventos de clique
-        permissoesUnicas.forEach(p => {
+        // C. Filtra permissões do perfil selecionado
+        const permissoesPerfil = Array.isArray(permissoes)
+            ? permissoes.filter(p => Number(p.id_perfis) === idPerfil)
+            : [];
+
+        // Ordena telas em ordem alfabética
+        telas.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+
+        // D. Renderiza cada tela na tabela
+        telas.forEach(t => {
+            if (t.ativo === false) return;
+
+            const idTela = t.id_telas || t.id;
+
+            // Busca a permissão vinculada a esta tela (pega a alteração mais recente em id_permissoes)
+            const permsTela = permissoesPerfil
+                .filter(p => Number(p.id_telas || p.id_tela) === Number(idTela))
+                .sort((a, b) => (b.id_permissoes || 0) - (a.id_permissoes || 0));
+
+            const perm = permsTela[0] || {};
+
             const tr = document.createElement("tr");
-            tr.className = "border-b border-slate-100 hover:bg-slate-50 transition-colors";
+            tr.className = "border-b hover:bg-slate-50 transition-colors";
 
-            // IDs necessários para o PUT
-            tr.setAttribute("data-id-tela", p.id_telas);
-            tr.setAttribute("data-id-permissao", p.id_permissoes || p.id);
+            // IDs necessários para salvar
+            tr.setAttribute("data-id-tela", idTela);
+            if (perm.id_permissoes || perm.id) {
+                tr.setAttribute("data-id-permissao", perm.id_permissoes || perm.id);
+            }
 
-            // Mapeamento dos nomes de tela
-            const nomesTelas = {
-                50: "Ocorrencias",
-                51: "Produtos",
-                52: "Maquinas",
-                53: "Colaboradores"
-            };
-            const nomeTela = p.nome_tela || nomesTelas[p.id_telas] || `Tela ${p.id_telas}`;
+            const nomeTela = t.nome || `Tela ${idTela}`;
 
             tr.innerHTML = `
-                <td class="p-3 border-r font-medium text-slate-700">${nomeTela}</td>
-                <td class="p-3 border-r text-center">
-                    <button type="button" class="chk-vis cursor-pointer p-1 rounded hover:bg-slate-100 transition-colors" data-ativo="${!!p.visualizar}" onclick="toggleCheckbox(this)">
-                        <i class="bi ${p.visualizar ? 'bi-check-square-fill text-emerald-600' : 'bi-square text-slate-300'} text-xl"></i>
-                    </button>
-                </td>
-                <td class="p-3 border-r text-center">
-                    <button type="button" class="chk-ins cursor-pointer p-1 rounded hover:bg-slate-100 transition-colors" data-ativo="${!!p.inserir}" onclick="toggleCheckbox(this)">
-                        <i class="bi ${p.inserir ? 'bi-check-square-fill text-emerald-600' : 'bi-square text-slate-300'} text-xl"></i>
-                    </button>
-                </td>
-                <td class="p-3 border-r text-center">
-                    <button type="button" class="chk-alt cursor-pointer p-1 rounded hover:bg-slate-100 transition-colors" data-ativo="${!!p.alterar}" onclick="toggleCheckbox(this)">
-                        <i class="bi ${p.alterar ? 'bi-check-square-fill text-emerald-600' : 'bi-square text-slate-300'} text-xl"></i>
-                    </button>
-                </td>
-                <td class="p-3 text-center">
-                    <button type="button" class="chk-exc cursor-pointer p-1 rounded hover:bg-slate-100 transition-colors" data-ativo="${!!p.excluir}" onclick="toggleCheckbox(this)">
-                        <i class="bi ${p.excluir ? 'bi-check-square-fill text-emerald-600' : 'bi-square text-slate-300'} text-xl"></i>
-                    </button>
-                </td>
+                <td class="p-2 border font-medium text-slate-800">${nomeTela}</td>
+                <td class="p-2 border text-center">${criarBtnPermissao('chk-vis', perm.visualizar)}</td>
+                <td class="p-2 border text-center">${criarBtnPermissao('chk-ins', perm.inserir)}</td>
+                <td class="p-2 border text-center">${criarBtnPermissao('chk-alt', perm.alterar)}</td>
+                <td class="p-2 border text-center">${criarBtnPermissao('chk-exc', perm.excluir)}</td>
             `;
 
             tbody.appendChild(tr);
         });
 
     } catch (err) {
-        console.error("Erro ao carregar matriz de permissões:", err);
+        console.error("Erro ao montar matriz de permissões:", err);
+        tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-red-500">Erro de conexão ao carregar matriz.</td></tr>`;
     }
 }
 
-// 3. Salva via PUT reutilizando o id_permissoes da linha
+// 5. SALVAR OU ATUALIZAR AS PERMISSÕES DA MATRIZ NO BANCO
 async function salvarPermissoesMatriz(e) {
-    e.preventDefault();
-    
-    const idPerfil = parseInt(document.getElementById("perm-perfil")?.value);
-    if (!idPerfil) {
+    if (e && e.preventDefault) e.preventDefault();
+
+    const selectPerfil = document.getElementById("perm-perfil");
+    const idPerfil = selectPerfil ? parseInt(selectPerfil.value, 10) : null;
+
+    if (!idPerfil || isNaN(idPerfil)) {
         alert("Selecione um perfil primeiro!");
         return;
     }
@@ -905,11 +986,11 @@ async function salvarPermissoesMatriz(e) {
     for (const row of linhas) {
         const idTelaAttr = row.getAttribute("data-id-tela");
         const idPermissaoAttr = row.getAttribute("data-id-permissao");
-        
+
         if (!idTelaAttr) continue;
 
-        const id_telas = parseInt(idTelaAttr);
-        const idPermissao = idPermissaoAttr ? parseInt(idPermissaoAttr) : null;
+        const id_telas = parseInt(idTelaAttr, 10);
+        const idPermissao = idPermissaoAttr ? parseInt(idPermissaoAttr, 10) : null;
 
         if (isNaN(id_telas)) continue;
 
@@ -933,7 +1014,7 @@ async function salvarPermissoesMatriz(e) {
                 payload.id = idPermissao;
                 res = await fetch(`${API_BASE}/permissoes/${idPermissao}`, {
                     method: "PUT",
-                    headers: { 
+                    headers: {
                         "Content-Type": "application/json",
                         "Accept": "application/json"
                     },
@@ -942,7 +1023,7 @@ async function salvarPermissoesMatriz(e) {
             } else {
                 res = await fetch(`${API_BASE}/permissoes/`, {
                     method: "POST",
-                    headers: { 
+                    headers: {
                         "Content-Type": "application/json",
                         "Accept": "application/json"
                     },
@@ -968,6 +1049,14 @@ async function salvarPermissoesMatriz(e) {
 
     if (comSucesso && totalProcessados > 0) {
         alert("Permissões salvas com sucesso!");
-        await carregarPermissoesMatriz(); // Recarrega para manter IDs sincronizados
+        await carregarPermissoesMatriz(); // Recarrega para sincronizar os IDs criados
     }
 }
+
+// 6. INICIALIZAÇÃO DE EVENTOS
+document.addEventListener("DOMContentLoaded", () => {
+    carregarSelectPerfisPermissoes();
+
+    // Adiciona evento de mudança ao select
+    document.getElementById("perm-perfil")?.addEventListener("change", carregarPermissoesMatriz);
+});
