@@ -53,49 +53,63 @@ async function carregarSelectColaboradores() {
     const select = document.getElementById("usr-colaborador");
     if (!select) return;
 
-    // Resgata o perfil ID e converte estritamente para número inteiro válido
-    let perfilId = typeof obterIdPerfilUsuario === 'function' 
-        ? obterIdPerfilUsuario() 
-        : (typeof PERFIL_USUARIO !== 'undefined' ? PERFIL_USUARIO : localStorage.getItem('id_perfis'));
+    // 1. Varredura profunda para localizar o ID do perfil onde quer que esteja salvo no browser
+    function encontrarPerfilIdDefinitivo() {
+        if (typeof PERFIL_USUARIO !== 'undefined' && PERFIL_USUARIO) return PERFIL_USUARIO;
+        if (typeof obterIdPerfilUsuario === 'function') {
+            const id = obterIdPerfilUsuario();
+            if (id) return id;
+        }
 
-    const perfilIdNum = parseInt(perfilId, 10);
+        // Tenta chaves simples no localStorage e sessionStorage
+        const chavesSimples = ['id_perfis', 'id_perfil', 'perfil_id', 'perfilId', 'perfil'];
+        for (const k of chavesSimples) {
+            const v = localStorage.getItem(k) || sessionStorage.getItem(k);
+            if (v && !isNaN(parseInt(v, 10)) && parseInt(v, 10) > 0) return parseInt(v, 10);
+        }
 
-    const headersRequisicao = {
-        'Content-Type': 'application/json'
-    };
-
-    // Só adiciona o cabeçalho se for um número inteiro estritamente válido (> 0)
-    if (!isNaN(perfilIdNum) && perfilIdNum > 0) {
-        headersRequisicao['x-perfil-id'] = perfilIdNum.toString();
+        // Tenta objetos JSON gravados no storage
+        const chavesObjetos = ['qc_user', 'usuario', 'user', 'dados_usuario', 'usuario_logado'];
+        for (const k of chavesObjetos) {
+            const raw = localStorage.getItem(k) || sessionStorage.getItem(k);
+            if (raw) {
+                try {
+                    const parsed = JSON.parse(raw);
+                    const idEncontrado = parsed.id_perfis || parsed.id_perfil || parsed.perfil_id || parsed.perfil;
+                    if (idEncontrado && !isNaN(parseInt(idEncontrado, 10))) return parseInt(idEncontrado, 10);
+                } catch (e) {}
+            }
+        }
+        return null;
     }
 
+    const perfilId = encontrarPerfilIdDefinitivo();
+
+    // 2. Monta o cabeçalho obrigatório com o ID localizado
+    const headersRequisicao = {
+        'Content-Type': 'application/json',
+        'x-perfil-id': perfilId ? String(perfilId) : ""
+    };
+
     try {
-        let res;
-        if (typeof fetchInteligente === 'function') {
-            res = await fetchInteligente(`${API_BASE}/colaboradores/`, `${API_BASE}/colaboradores`, {
+        // Dispara o fetch com o header x-perfil-id
+        let res = await fetch(`${API_BASE}/colaboradores/`, {
+            method: 'GET',
+            cache: 'no-store',
+            headers: headersRequisicao
+        });
+
+        if (res.status === 404) {
+            res = await fetch(`${API_BASE}/colaboradores`, {
                 method: 'GET',
                 cache: 'no-store',
                 headers: headersRequisicao
             });
-        } else {
-            res = await fetch(`${API_BASE}/colaboradores/`, {
-                method: 'GET',
-                cache: 'no-store',
-                headers: headersRequisicao
-            });
-            if (!res.ok && res.status === 404) {
-                res = await fetch(`${API_BASE}/colaboradores`, {
-                    method: 'GET',
-                    cache: 'no-store',
-                    headers: headersRequisicao
-                });
-            }
         }
 
         if (!res.ok) {
-            // Log detalhado para inspecionar exatamente o campo que causou o 422
             const erroDetalhe = await res.json().catch(() => null);
-            console.error("Detalhes do erro retornado pelo FastAPI (422):", erroDetalhe);
+            console.error("Detalhes da rejeição na listagem de colaboradores:", erroDetalhe);
             throw new Error(`Status HTTP: ${res.status}`);
         }
 
