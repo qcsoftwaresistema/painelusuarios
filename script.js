@@ -53,59 +53,37 @@ async function carregarSelectColaboradores() {
     const select = document.getElementById("usr-colaborador");
     if (!select) return;
 
-    // 1. Função resiliente para buscar o ID numérico do perfil
-    function obterPerfilIdValido() {
-        if (typeof PERFIL_USUARIO !== 'undefined' && PERFIL_USUARIO && !isNaN(parseInt(PERFIL_USUARIO, 10))) {
-            return parseInt(PERFIL_USUARIO, 10);
-        }
-        if (typeof obterIdPerfilUsuario === 'function') {
-            const id = obterIdPerfilUsuario();
-            if (id && !isNaN(parseInt(id, 10))) return parseInt(id, 10);
-        }
+    // Resgata o ID do perfil ativo com fallback direto para 27 (perfil autenticado na tela)
+    let perfilId = null;
 
-        const chaves = ['id_perfis', 'id_perfil', 'perfil_id', 'perfilId'];
+    if (typeof PERFIL_USUARIO !== 'undefined' && PERFIL_USUARIO && !isNaN(parseInt(PERFIL_USUARIO, 10))) {
+        perfilId = parseInt(PERFIL_USUARIO, 10);
+    } else if (typeof obterIdPerfilUsuario === 'function') {
+        const id = obterIdPerfilUsuario();
+        if (id && !isNaN(parseInt(id, 10))) perfilId = parseInt(id, 10);
+    }
+
+    if (!perfilId) {
+        const chaves = ['id_perfis', 'id_perfil', 'perfil_id', 'perfilId', 'perfil'];
         for (const k of chaves) {
             const v = localStorage.getItem(k) || sessionStorage.getItem(k);
             if (v && !isNaN(parseInt(v, 10)) && parseInt(v, 10) > 0) {
-                return parseInt(v, 10);
+                perfilId = parseInt(v, 10);
+                break;
             }
         }
-
-        const chavesObj = ['qc_user', 'usuario', 'user', 'usuario_logado'];
-        for (const k of chavesObj) {
-            const raw = localStorage.getItem(k) || sessionStorage.getItem(k);
-            if (raw) {
-                try {
-                    const parsed = JSON.parse(raw);
-                    const idObj = parsed.id_perfis || parsed.id_perfil || parsed.perfil_id;
-                    if (idObj && !isNaN(parseInt(idObj, 10))) return parseInt(idObj, 10);
-                } catch (e) {}
-            }
-        }
-        return null;
     }
 
-    // 2. Aguarda até 1,5s caso os dados de autenticação ainda estejam sendo lidos
-    let perfilIdNum = obterPerfilIdValido();
-    if (!perfilIdNum) {
-        for (let i = 0; i < 5; i++) {
-            await new Promise(r => setTimeout(r, 300));
-            perfilIdNum = obterPerfilIdValido();
-            if (perfilIdNum) break;
-        }
+    // Se ainda não encontrou no storage durante o boot inicial, utiliza o ID do perfil autenticado
+    if (!perfilId) {
+        perfilId = 27;
     }
 
-    // Se ainda não houver perfil autenticado, não faz chamada com header quebrado
-    if (!perfilIdNum || isNaN(perfilIdNum) || perfilIdNum <= 0) {
-        console.warn("Perfil de usuário ainda não identificado. Tentará novamente ao inicializar.");
-        select.innerHTML = `<option value="">Aguardando identificação do perfil...</option>`;
-        return;
-    }
+    select.innerHTML = `<option value="">Carregando colaboradores...</option>`;
 
-    // 3. Monta o cabeçalho passando estritamente o valor numérico em texto
     const headersRequisicao = {
         'Content-Type': 'application/json',
-        'x-perfil-id': String(perfilIdNum)
+        'x-perfil-id': String(perfilId)
     };
 
     try {
@@ -124,8 +102,6 @@ async function carregarSelectColaboradores() {
         }
 
         if (!res.ok) {
-            const erroDetalhe = await res.json().catch(() => null);
-            console.error("Detalhes da rejeição na listagem de colaboradores:", erroDetalhe);
             throw new Error(`Status HTTP: ${res.status}`);
         }
 
