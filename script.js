@@ -53,8 +53,39 @@ async function carregarSelectColaboradores() {
     const select = document.getElementById("usr-colaborador");
     if (!select) return;
 
+    // Resgata o perfil ID do usuário ativo
+    const perfilId = typeof obterIdPerfilUsuario === 'function' 
+        ? obterIdPerfilUsuario() 
+        : (typeof PERFIL_USUARIO !== 'undefined' ? PERFIL_USUARIO : localStorage.getItem('id_perfis'));
+
+    const headersRequisicao = {
+        'Content-Type': 'application/json',
+        'x-perfil-id': perfilId ? perfilId.toString() : ""
+    };
+
     try {
-        const res = await fetchInteligente(`${API_BASE}/colaboradores/`, `${API_BASE}/colaboradores`);
+        let res;
+        // Se a função fetchInteligente suportar passagem de opções/headers:
+        if (typeof fetchInteligente === 'function') {
+            res = await fetchInteligente(`${API_BASE}/colaboradores/`, `${API_BASE}/colaboradores`, {
+                headers: headersRequisicao
+            });
+        } else {
+            // Fallback direto via fetch padrão com cabeçalho de autenticação
+            res = await fetch(`${API_BASE}/colaboradores/`, {
+                method: 'GET',
+                cache: 'no-store',
+                headers: headersRequisicao
+            });
+            if (!res.ok && res.status === 404) {
+                res = await fetch(`${API_BASE}/colaboradores`, {
+                    method: 'GET',
+                    cache: 'no-store',
+                    headers: headersRequisicao
+                });
+            }
+        }
+
         if (!res.ok) throw new Error(`Status HTTP: ${res.status}`);
 
         const colaboradores = await res.json();
@@ -64,6 +95,9 @@ async function carregarSelectColaboradores() {
             select.innerHTML = `<option value="">Nenhum colaborador encontrado</option>`;
             return;
         }
+
+        // Ordena por ordem alfabética para facilitar a seleção
+        colaboradores.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
 
         colaboradores.forEach(c => {
             const idColab = c.id_colaboradores ?? c.id;
