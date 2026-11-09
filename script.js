@@ -53,25 +53,31 @@ async function carregarSelectColaboradores() {
     const select = document.getElementById("usr-colaborador");
     if (!select) return;
 
-    // Resgata o perfil ID do usuário ativo
-    const perfilId = typeof obterIdPerfilUsuario === 'function' 
+    // Resgata o perfil ID e converte estritamente para número inteiro válido
+    let perfilId = typeof obterIdPerfilUsuario === 'function' 
         ? obterIdPerfilUsuario() 
         : (typeof PERFIL_USUARIO !== 'undefined' ? PERFIL_USUARIO : localStorage.getItem('id_perfis'));
 
+    const perfilIdNum = parseInt(perfilId, 10);
+
     const headersRequisicao = {
-        'Content-Type': 'application/json',
-        'x-perfil-id': perfilId ? perfilId.toString() : ""
+        'Content-Type': 'application/json'
     };
+
+    // Só adiciona o cabeçalho se for um número inteiro estritamente válido (> 0)
+    if (!isNaN(perfilIdNum) && perfilIdNum > 0) {
+        headersRequisicao['x-perfil-id'] = perfilIdNum.toString();
+    }
 
     try {
         let res;
-        // Se a função fetchInteligente suportar passagem de opções/headers:
         if (typeof fetchInteligente === 'function') {
             res = await fetchInteligente(`${API_BASE}/colaboradores/`, `${API_BASE}/colaboradores`, {
+                method: 'GET',
+                cache: 'no-store',
                 headers: headersRequisicao
             });
         } else {
-            // Fallback direto via fetch padrão com cabeçalho de autenticação
             res = await fetch(`${API_BASE}/colaboradores/`, {
                 method: 'GET',
                 cache: 'no-store',
@@ -86,7 +92,12 @@ async function carregarSelectColaboradores() {
             }
         }
 
-        if (!res.ok) throw new Error(`Status HTTP: ${res.status}`);
+        if (!res.ok) {
+            // Log detalhado para inspecionar exatamente o campo que causou o 422
+            const erroDetalhe = await res.json().catch(() => null);
+            console.error("Detalhes do erro retornado pelo FastAPI (422):", erroDetalhe);
+            throw new Error(`Status HTTP: ${res.status}`);
+        }
 
         const colaboradores = await res.json();
         select.innerHTML = `<option value="">Selecione um colaborador...</option>`;
@@ -96,7 +107,6 @@ async function carregarSelectColaboradores() {
             return;
         }
 
-        // Ordena por ordem alfabética para facilitar a seleção
         colaboradores.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
 
         colaboradores.forEach(c => {
