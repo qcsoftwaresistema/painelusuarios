@@ -53,46 +53,62 @@ async function carregarSelectColaboradores() {
     const select = document.getElementById("usr-colaborador");
     if (!select) return;
 
-    // 1. Varredura profunda para localizar o ID do perfil onde quer que esteja salvo no browser
-    function encontrarPerfilIdDefinitivo() {
-        if (typeof PERFIL_USUARIO !== 'undefined' && PERFIL_USUARIO) return PERFIL_USUARIO;
+    // 1. Função resiliente para buscar o ID numérico do perfil
+    function obterPerfilIdValido() {
+        if (typeof PERFIL_USUARIO !== 'undefined' && PERFIL_USUARIO && !isNaN(parseInt(PERFIL_USUARIO, 10))) {
+            return parseInt(PERFIL_USUARIO, 10);
+        }
         if (typeof obterIdPerfilUsuario === 'function') {
             const id = obterIdPerfilUsuario();
-            if (id) return id;
+            if (id && !isNaN(parseInt(id, 10))) return parseInt(id, 10);
         }
 
-        // Tenta chaves simples no localStorage e sessionStorage
-        const chavesSimples = ['id_perfis', 'id_perfil', 'perfil_id', 'perfilId', 'perfil'];
-        for (const k of chavesSimples) {
+        const chaves = ['id_perfis', 'id_perfil', 'perfil_id', 'perfilId'];
+        for (const k of chaves) {
             const v = localStorage.getItem(k) || sessionStorage.getItem(k);
-            if (v && !isNaN(parseInt(v, 10)) && parseInt(v, 10) > 0) return parseInt(v, 10);
+            if (v && !isNaN(parseInt(v, 10)) && parseInt(v, 10) > 0) {
+                return parseInt(v, 10);
+            }
         }
 
-        // Tenta objetos JSON gravados no storage
-        const chavesObjetos = ['qc_user', 'usuario', 'user', 'dados_usuario', 'usuario_logado'];
-        for (const k of chavesObjetos) {
+        const chavesObj = ['qc_user', 'usuario', 'user', 'usuario_logado'];
+        for (const k of chavesObj) {
             const raw = localStorage.getItem(k) || sessionStorage.getItem(k);
             if (raw) {
                 try {
                     const parsed = JSON.parse(raw);
-                    const idEncontrado = parsed.id_perfis || parsed.id_perfil || parsed.perfil_id || parsed.perfil;
-                    if (idEncontrado && !isNaN(parseInt(idEncontrado, 10))) return parseInt(idEncontrado, 10);
+                    const idObj = parsed.id_perfis || parsed.id_perfil || parsed.perfil_id;
+                    if (idObj && !isNaN(parseInt(idObj, 10))) return parseInt(idObj, 10);
                 } catch (e) {}
             }
         }
         return null;
     }
 
-    const perfilId = encontrarPerfilIdDefinitivo();
+    // 2. Aguarda até 1,5s caso os dados de autenticação ainda estejam sendo lidos
+    let perfilIdNum = obterPerfilIdValido();
+    if (!perfilIdNum) {
+        for (let i = 0; i < 5; i++) {
+            await new Promise(r => setTimeout(r, 300));
+            perfilIdNum = obterPerfilIdValido();
+            if (perfilIdNum) break;
+        }
+    }
 
-    // 2. Monta o cabeçalho obrigatório com o ID localizado
+    // Se ainda não houver perfil autenticado, não faz chamada com header quebrado
+    if (!perfilIdNum || isNaN(perfilIdNum) || perfilIdNum <= 0) {
+        console.warn("Perfil de usuário ainda não identificado. Tentará novamente ao inicializar.");
+        select.innerHTML = `<option value="">Aguardando identificação do perfil...</option>`;
+        return;
+    }
+
+    // 3. Monta o cabeçalho passando estritamente o valor numérico em texto
     const headersRequisicao = {
         'Content-Type': 'application/json',
-        'x-perfil-id': perfilId ? String(perfilId) : ""
+        'x-perfil-id': String(perfilIdNum)
     };
 
     try {
-        // Dispara o fetch com o header x-perfil-id
         let res = await fetch(`${API_BASE}/colaboradores/`, {
             method: 'GET',
             cache: 'no-store',
